@@ -1,0 +1,714 @@
+-----------------------------------------
+title: "Rio Tinto"
+author: "Amir Amin"
+date: "01 October 2019"
+Project: Power Consumption Prediction
+output: html_document
+-----------------------------------------
+Pre-processing
+-----------------------------------------
+
+# import the packages
+Install the packages (*** run this part just if you don't have these packages on your PC)
+```{r}
+# install.packages(c("corrplot","mlbench","caret", 
+#                    "mice","VIM","readr",
+#                    "gganimate","tseries","scales", 
+#                    "ggplot2","dplyr","rmarkdown",
+#                    "tidyr","lubridate","labeling", 
+#                    "forecast","gapminder", 
+#                    "gifski","transformr"))
+```
+
+
+call the packages
+```{r}
+library(corrplot) # plot the correlation
+library(mlbench) # remove strongly correlated features
+library(caret) # ML algorithms
+library(mice) # Handlinf missed data
+library(VIM) # plot missing values
+library("readr") # save the dataset
+library(gganimate)
+library(tseries)
+library(scales)
+
+library(ggplot2)
+library(dplyr)
+library(rmarkdown)
+library(tidyr)
+library(lubridate)
+library(labeling)
+library(forecast)
+
+library(gapminder)
+library(gifski)
+library(transformr)
+
+# make sure that you have installed all of these packages
+```
+
+
+# import the dataset
+```{r}
+setwd("C:/Users/AMI017/Desktop/Rio")
+power_data <- read.csv("Book_1.csv", header = TRUE)
+```
+
+
+# undertand the data
+1- see the name of features
+```{r}
+colnames(power_data)
+```
+
+
+2- dimension of dataset & few values of features
+```{r}
+dim(power_data)
+head(power_data, n = 5) # top 5 rows
+```
+
+
+3- split date and time
+```{r}
+myDate <- as.Date(power_data$date) #already got this one from the answers above
+myTime <- format(as.POSIXct(power_data$date) ,format = "%H:%M")
+myTime <- myTime[ order(myTime , decreasing = FALSE )]
+```
+
+
+4- merge separated date and time to the main dataset
+```{r}
+power_data <- cbind(power_data, myDate, myTime)
+```
+
+
+5- change the format of date
+```{r}
+power_data$myDate <- as.Date(power_data$myDate, "%d/%m/%Y") 
+```
+
+
+6- specify weekdays
+```{r}
+myWeek <- weekdays(as.Date(power_data$myDate,format="%m/%d/%Y"))
+```
+
+
+7- specify the months 
+```{r}
+myMonth <- months(power_data$myDate)
+```
+
+
+8- merge weekdays and months to the main dataset
+```{r}
+power_data <- cbind(power_data, myWeek, myMonth)
+```
+
+
+9- sort the months
+```{r}
+power_data$myMonth <- ordered(power_data$myMonth, month.name)
+```
+
+
+10- Monthly power consumption (it's important because customers pay monthly)
+```{r}
+ggplot(power_data, aes(x = myMonth, fill = myMonth))+
+  geom_bar(aes(y = Appliances / 1000), stat="identity") +
+  xlab("") +
+  ylab("Total Power Consumption (KW)") +
+  labs(fill = " ") +
+  theme(legend.position = "right", 
+            legend.text=element_text(size=10),
+            legend.box = "vertical",
+            axis.text.x = element_text(face="bold",color="#993333", size=10, angle=0, hjust= 0.5, vjust = 1), # x , y labels
+            axis.text.y = element_text(face="bold",color="#993333", size=10, angle=0), 
+            axis.title.x = element_text(face="bold", vjust=0, size=10),  # X axis title
+            axis.title.y = element_text(face="bold", hjust= 0.5, vjust= 3 , size=10))
+
+ggsave("monthly_power_consumption.png")
+
+```
+
+
+monthly power consumption (animation)
+```{r}
+monthly_power <- ggplot(power_data, aes(x = myMonth, fill = myMonth))+
+  geom_bar(aes(y = Appliances / 1000), stat="identity") +
+  xlab("") +
+  ylab("Total Power Consumption (KW)") +
+  labs(fill = " ") +
+  theme(legend.position = "right", 
+            legend.text=element_text(size=16, color="#993333",face="bold"),
+            legend.box = "vertical",
+            axis.text.x = element_text(face="bold",color="#993333", size=16, angle=45, hjust= 1, vjust = 1), # x , y labels
+            axis.text.y = element_text(face="bold",color="#993333", size=16, angle=0), 
+            axis.title.x = element_text(face="bold",color="#993333", vjust=0, size=16),  # X axis title
+            axis.title.y = element_text(face="bold",color="#993333", hjust= 0.5, vjust= 3 , size=16),
+            plot.title = element_text(size = 30, face = "bold", colour = "red")
+            ) +
+  transition_states(as.Date(power_data$date), wrap = TRUE, transition_length = 0.1, state_length = 0.1) +
+  shadow_mark() +
+  labs(title = '{closest_state}')
+
+animate(monthly_power, fps = 15, duration = 20, height = 600, width =600)
+anim_save("monthly_power_consumption.gif")
+```
+
+
+11- Weekdays power consumption
+```{r}
+ggplot(power_data, aes(x = factor(myWeek, weekdays(min(power_data$myDate) + 0:6)) , y = Appliances, fill = myMonth)) +
+  geom_bar(stat="identity", position =  position_dodge()) +
+  xlab("") +
+  ylab("Power Consumption (W)") +
+  labs(fill = " ") +
+  theme(legend.position = "right", 
+            legend.text=element_text(size=10),
+            legend.box = "vertical",
+            axis.text.x = element_text(face="bold",color="#993333", size=10, angle=30, hjust= 0.75, vjust = 1), # x , y labels
+            axis.text.y = element_text(face="bold",color="#993333", size=10, angle=0), 
+            axis.title.x = element_text(face="bold", vjust=0, size=10),  # X axis title
+            axis.title.y = element_text(face="bold", hjust= 0.5, vjust= 3 , size=10))
+ggsave("weekdays_power_consumption.png")
+```
+
+
+Weekdays power consumption (animation)
+```{r}
+weekly_power <- ggplot(power_data, aes(x = factor(myWeek, weekdays(min(power_data$myDate) + 0:6)) , y = Appliances, fill = myMonth)) +
+  geom_bar(stat="identity", position =  position_dodge()) +
+  xlab("") +
+  ylab("Power Consumption (W)") +
+  labs(fill = " ") + 
+  theme(legend.position = "right", 
+            legend.text=element_text(size=16, color="#993333",face="bold"),
+            legend.box = "vertical",
+            axis.text.x = element_text(face="bold",color="#993333", size=16, angle=45, hjust= 1, vjust = 1), # x , y labels
+            axis.text.y = element_text(face="bold",color="#993333", size=16, angle=0), 
+            axis.title.x = element_text(face="bold",color="#993333", vjust=0, size=16),  # X axis title
+            axis.title.y = element_text(face="bold",color="#993333", hjust= 0.5, vjust= 3 , size=16),
+            plot.title = element_text(size = 30, face = "bold", colour = "red")
+            ) +
+  transition_states(as.Date(power_data$date), wrap = TRUE, transition_length = 1, state_length = 1) +
+  shadow_mark() +
+  labs(title = 'Date: {closest_state}')
+
+animate(weekly_power, fps = 20, duration = 30, height = 600, width =600)
+anim_save("weekdays_power_consumption.gif")
+```
+
+
+12- Detailed daily power consumption
+```{r}
+# power_data$date <- as.Date(power_data$date)
+
+ggplot(power_data, aes(x = unique(as.POSIXct(date)), colour = myMonth)) +
+    geom_point(aes(y = Appliances)) +
+    xlab("") +
+    ylab("Power Consumption (W)") +
+    labs(colour = " ") +
+    scale_x_datetime( breaks = date_breaks("1 week"),
+                      labels = date_format("%a-%d- %m", tz="CET"),
+                      expand = c(0,0)) +
+    theme(legend.position = "right", 
+            legend.text=element_text(size=10),
+            legend.box = "vertical",
+            axis.text.x = element_text(face="bold",color="#993333", size=10, angle=45, hjust= 1, vjust = 1), # x , y labels
+            axis.text.y = element_text(face="bold",color="#993333", size=10, angle=0), 
+            axis.title.x = element_text(face="bold", vjust=0, size=10),  # X axis title
+            axis.title.y = element_text(face="bold", hjust= 0.5, vjust= 3 , size=10)) 
+ggsave("daily_power_consumption.png")
+
+```
+
+
+Detailed daily power consumption (animation)
+```{r}
+daily_power <- ggplot(power_data, aes(x = unique(as.POSIXct(date)), colour = myMonth)) +
+    geom_point(aes(y = Appliances)) +
+    xlab("") +
+    ylab("Power Consumption (W)") +
+    labs(colour = " ") +
+    scale_x_datetime( breaks = date_breaks("1 week"),
+                      labels = date_format("%a-%d- %m", tz="CET"),
+                      expand = c(0,0)) +
+    theme(legend.position = "right", 
+            legend.text=element_text(size=16, color="#993333",face="bold"),
+            legend.box = "vertical",
+            axis.text.x = element_text(face="bold",color="#993333", size=16, angle=45, hjust= 1, vjust = 1), # x , y labels
+            axis.text.y = element_text(face="bold",color="#993333", size=16, angle=0), 
+            axis.title.x = element_text(face="bold",color="#993333", vjust=0, size=16),  # X axis title
+            axis.title.y = element_text(face="bold",color="#993333", hjust= 0.5, vjust= 3 , size=16),
+            plot.title = element_text(size = 30, face = "bold", colour = "red")
+            )  +
+  transition_states(as.Date(power_data$date), wrap = TRUE, transition_length = 1, state_length = 1) +
+  shadow_mark() +
+  labs(title = 'Date: {closest_state}')
+
+animate(daily_power, fps = 20, duration = 30, height = 600, width =600)
+anim_save("daily_power_consumption.gif")
+```
+
+
+# Understanding each of the features and their importance
+13- histogram of the features (frequency of data)
+```{r}
+for (i in 2:dim(power_data)[2]) { # Hist
+  hist(power_data[,i], xlab = colnames(power_data[i]), col = "red", main= "")$breaks
+  summary(power_data[,i])
+}
+```
+
+
+14- boxplot of features (range of data)
+```{r}
+#par(mfrow = c (5,6))
+for (i in 2:dim(power_data)[2]) { # Boxplot
+  boxplot(power_data[,i], outcol = "red", outcex = 1.5, ylab = colnames(power_data[i]))
+}
+```
+- T1 to T9, except T6, have the same range
+- RH1-1 to RH-9, except RH-6, have the same range
+- T6 and Tout, rv1 and rv2, have also the same range
+
+
+15- Distribution of features (changes of each feature)
+```{r}
+# par(mfrow = c (5,6))
+for (i in 5:dim(power_data)[2]) { # Disctribution of data
+  plot(power_data[,i], col = "red", ylab = colnames(power_data[i]), xlab = "")
+}
+
+```
+
+
+16- Correlation between the features
+```{r}
+# See the correlation
+corr_value <- cor(power_data[,c(2:29)], 
+                  use = "pairwise.complete.obs") # Correlation 
+
+# par(mfrow = c (1,1)) # to see the fig bigger
+png(height=1200, width=1200, pointsize=25, file="Correlation.png")
+
+corrplot(corr_value, 
+         method="pie",  
+         type = "upper",
+         tl.col = "black",
+         tl.srt = 90, 
+         sig.level = 0.01, 
+         insig = "blank",
+         tl.cex = 0.7) 
+
+```
+- internal temperatures (except T6) are strongly correlated
+- internal humidity (except RH-6) are strongly correlated
+- rv1 and rv2 are strongly correlated
+- T6 is the outdoor sensor since its values are similar to the outdoor values
+
+
+# manage the missing values
+- 1- percentage of NA values for each feature (in each column and row)
+```{r}
+sum(is.na(power_data))# 78667 NA values
+
+pMiss <- function(x){sum(is.na(x))/length(x)*100}
+apply(power_data,2,pMiss)# Check each column
+apply(power_data,1,pMiss)# Check each row
+```
+
+
+2- pattern of the missing data (pattern can be seen in high resolutionn PC)
+```{r}
+aggr_plot <- aggr(power_data, 
+                  col=c('navyblue','red'), 
+                  numbers=TRUE, 
+                  sortVars=TRUE, 
+                  labels=names(data), 
+                  cex.axis=.7, 
+                  gap=3, 
+                  ylab=c("Histogram of missing data","Pattern"))
+```
+
+
+3- predict the NA values based on the values of the rest of data using Random Forest technique
+```{r}
+predicted_NA_values <- mice(power_data[,2:dim(power_data)[2]],
+                 m=5,
+                 maxit=5,
+                 meth='pmm',
+                 seed=500)
+```
+
+
+4- summary of predicted values
+```{r}
+summary(predicted_NA_values)
+```
+
+
+5- impute the missing data using mice
+```{r}
+# NA values were in columns 2 to 29
+# replace them with their predicted values
+completedData <- mice::complete(predicted_NA_values,1)
+power_data[,2:dim(power_data)[2]] <- completedData
+```
+
+
+6- check whether there is still any NA data in the dataset
+```{r}
+sum(is.na(power_data))
+```
+- no NA data left
+
+
+7- boxplot of the features to compare their values before and after imputing NA data
+```{r}
+for (i in 2:dim(power_data)[2]) { # Hist
+  boxplot(power_data[,i], outcol = "red", outcex = 1.5, main = colnames(power_data[i]))
+  summary(power_data[,i])
+}
+```
+Tout and T6 are almost the same; T6 should be for outdoor area (Alfresco or balcony).
+
+
+# save the new dataset without any NA values
+dataset is ready to be used to develop the predictive algorithm
+```{r}
+write_csv(power_data,"C:/Users/AMI017/Desktop/Rio/power_data.csv")
+# View(head(power_consumption))
+```
+
+
+# Question-1: T6 is really outdoor tempearture?
+Average of indoor temperature (T6 excluded)
+```{r}
+sum_temp <- 0
+for (i in c("T1","T2","T3","T4","T5","T7","T8","T9")) {
+  sum_temp <- sum_temp + power_data[,i]
+}
+avg_indoor_temp <- sum_temp / 8
+```
+
+
+plot the temperature range
+```{r}
+boxplot(cbind(power_data[,c("T1","T2","T3","T4","T5","T6","T7","T8","T9","T_out")]),
+# boxplot(cbind(power_data[,c("T1","T2","T3","T4","T5","T6","T7","T8","T9","T_out")], Tav = avg_indoor_temp),
+        outcol = "red", outcex = 1.5)
+grid(NA, 5, lwd = 2)
+grid (NULL,NULL, lty = 10, col = "cornsilk2")
+```
+- T6 range is similar to Tout
+- So, for internal tempearture,we should exclude T6
+
+
+# Question-2: how's humity of internal areas?
+Average of input humidity (RH_6 excluded)
+```{r}
+sum_humidity <- 0
+for (i in c("RH_1","RH_2","RH_3","RH_4","RH_5","RH_7","RH_8","RH_9")) {
+  sum_humidity <- sum_humidity + power_data[,i]
+}
+avg_indoor_humidity <- sum_humidity / 8
+```
+
+
+humidity range
+```{r}
+boxplot(cbind(power_data[,c("RH_1","RH_2","RH_3","RH_4","RH_5","RH_6","RH_7","RH_8","RH_9","RH_out")],
+              avg_indoor_humidity),
+        outcol = "red", outcex = 1.5)
+grid(NA, 5, lwd = 2)
+grid (NULL,NULL, lty = 10, col = "cornsilk2")
+```
+
+
+# Question-3: how are the rest of features (columns 23-28)?
+```{r}
+boxplot(power_data[23:29])
+```
+- rv1 and rv2 are strongy related and show almost the same values
+
+
+we consider the average of rv1 and rv2 since they show almost similar data
+```{r}
+avg_rv <- (power_data[,c("rv1")] + power_data[,c("rv2")])/2
+```
+
+
+- Now we have 1 value for internal temperature, 1 for internal humidity, and 1 for rv
+- To understand how the power consumption changes at home, Temperature and humidity difference is important (not their specific values)
+```{r}
+temp_difference <- avg_indoor_temp - power_data[,c("T_out")]
+humidity_difference <- avg_indoor_humidity - power_data[,c("RH_out")]
+```
+
+
+# focus on the final features 
+we call the new dataset "power_consumption"
+```{r}
+power_consumption <- data.frame(power_data[,c("date","Appliances","lights")],
+                                temp_difference,
+                                humidity_difference,
+                                power_data[,c("Press_mm_hg","Windspeed","Visibility","Tdewpoint")],
+                                avg_rv) # main dataset
+```
+
+
+# manage outliers of inputs
+```{r}
+# although we see outliers on the boxplot, values are not unrealistic
+# So, we can't remove the outliers because they are in the normal range
+```
+
+
+
+# handle outliers
+```{r}
+# counter <- 0 # count the number of outliers
+# limited_max <- double(dim(power_consumption)[2]-3)
+# limited_min <- double(dim(power_consumption)[2]-3)
+# outlier_cutoff_1 <- double(dim(power_consumption)[2]-3)
+# outlier_cutoff_2 <- double(dim(power_consumption)[2]-3)
+# 
+# # Find max and min of each column just cthe data inside the boundary (not outliers)
+# for (i in 4:dim(power_consumption)[2]) {
+#   outlier_cutoff_1[i] <- quantile(power_consumption[,i],0.75, na.rm = TRUE) + 1.5 * IQR(power_consumption[,i], na.rm = TRUE)
+#   outlier_cutoff_2[i] <- quantile(power_consumption[,i],0.25, na.rm = TRUE) - 1.5 * IQR(power_consumption[,i], na.rm = TRUE)
+#   # Interquartile Range (IQR) = Q3 - Q1
+#   
+#   limited_max[i] <- max(power_consumption[which(power_consumption[,i] < outlier_cutoff_1[i] & power_consumption[,i] > outlier_cutoff_2[i]),i])
+#   limited_min[i] <- min(power_consumption[which(power_consumption[,i] < outlier_cutoff_1[i] & power_consumption[,i] > outlier_cutoff_2[i]),i])
+# }
+# 
+# # Replace outliers with min/max of each column
+# # We tried 2 methods: 1- replace with 0.5 and 0.95 quantiles (still had outlier), 
+# # 2- min-max of data inside boundry (2 didnt have outlier and better)
+# for (i in 4:dim(power_consumption)[2]) { # 4 different approches to handle outliers 
+#   print(colnames(power_consumption[i]))
+# 
+#   # caps <- quantile(power_consumption[,i], probs=c(.05, .95), na.rm = T)
+#   for (j in 1:dim(power_consumption)[1]) { # row
+#     if(!is.na(power_consumption[j,i])){
+#       if((power_consumption[j,i] > outlier_cutoff_1[i])){
+#         counter <- counter + 1
+#         #power_consumption[j,i] <- caps[2] # Replace outlier with mean value
+#         power_consumption[j,i] <- limited_max[i] # Replace outlier with max value
+#       } 
+#       else if(power_consumption[j,i] < outlier_cutoff_2[i]){
+#         counter <- counter + 1
+#         #power_consumption[j,i] <- caps[1] # Replace outlier with min value
+#         power_consumption[j,i] <- limited_min[i]
+#       }
+#     }
+#   }
+#   print(counter)
+#   counter <- 0
+# }
+# 
+# for (i in 4:dim(power_consumption)[2]) { 
+#   boxplot(power_consumption[,i], outcol = "red", outcex = 1.5, ylab = colnames(power_consumption[i]))
+# }
+```
+
+
+# feature selection
+- which features are strongly correlated?
+```{r}
+corr_value <- cor(power_consumption[,2:dim(power_consumption)[2]])
+corrplot(corr_value, 
+         method="pie", 
+         type = "upper", 
+         order = "alphabet",
+         tl.col = "black", 
+         tl.srt = 45, 
+         sig.level = 0.01, 
+         insig = "blank")
+
+# we consider 70% correlation as the strong correlation
+highly_Correlated <- findCorrelation(corr_value, cutoff=0.7) 
+print(colnames(power_consumption[,2:dim(power_consumption)[2]][highly_Correlated])) 
+
+# temp_difference and Tdewpoint are strongly correlated
+# so, we exclude Tdewpoint because we can find its value using the temp_difference values
+which(colnames(power_consumption)=="Tdewpoint") # Tdewpoint is column 11
+```
+
+
+- Remove strongly correlated features
+```{r}
+power_consumption  <- power_consumption[,-c(9)] # "Tdewpoint" is excluded
+```
+
+
+# save the pre-processed dataset
+dataset is ready to be used to develop the predictive algorithm
+```{r}
+write_csv(power_consumption,"C:/Users/AMI017/Desktop/Rio/power_consumption.csv")
+# View(head(power_consumption))
+```
+
+
+# import our prepared dataset without any NA
+```{r}
+power_consumption <- read.csv("power_consumption.csv")
+```
+
+
+split date and time in the new dataset
+```{r}
+myDate <- as.Date(power_consumption$date) #already got this one from the answers above
+myTime <- format(as.POSIXct(power_consumption$date) ,format = "%H:%M")
+myTime <- myTime[ order(myTime , decreasing = FALSE )]
+power_consumption <- cbind(power_consumption, myDate, myTime)
+power_consumption$myDate <- as.Date(power_consumption$myDate, "%d/%m/%Y") 
+myWeek <- weekdays(as.Date(power_consumption$myDate,format="%m/%d/%Y"))
+myMonth <- months(power_consumption$myDate)
+power_consumption <- cbind(power_consumption, myWeek, myMonth)
+power_consumption$myMonth <- ordered(power_consumption$myMonth, month.name)
+
+```
+
+
+consider total power consumption and average of weather condition each day
+```{r}
+temp_avg <- double(0)
+humidity_avg <- double(0)
+pressure_avg <- double(0)
+wind_avg <- double(0)
+visibility_avg <- double(0)
+rv_avg <- double(0)
+Appliances_total <- double(0)
+lights_total <- double(0)
+c <- 0 # counter
+
+for (i in unique(power_consumption$myDate)) {
+  c <- c + 1
+  
+  temp_avg[c] <- mean(power_consumption[which(power_consumption$myDate == i),'temp_difference']) 
+  humidity_avg[c] <- mean(power_consumption[which(power_consumption$myDate == i),'humidity_difference'])
+  pressure_avg[c] <- mean(power_consumption[which(power_consumption$myDate == i),'Press_mm_hg']) 
+  wind_avg[c] <- mean(power_consumption[which(power_consumption$myDate == i),'Windspeed']) 
+  visibility_avg[c] <- mean(power_consumption[which(power_consumption$myDate == i),'Visibility']) 
+  rv_avg[c] <- mean(power_consumption[which(power_consumption$myDate == i),'avg_rv']) 
+  Appliances_total[c] <- sum(power_consumption[which(power_consumption$myDate == i),'Appliances']) 
+  lights_total[c] <- sum(power_consumption[which(power_consumption$myDate == i),'lights']) 
+}
+```
+
+
+days of collected data
+```{r}
+length(unique(power_consumption$myDate)) # 138 days data
+```
+
+
+
+```{r}
+daily_dataset <- data.frame(
+                             date = unique(power_consumption$myDate),
+                             temp = temp_avg,
+                             humidity = humidity_avg,
+                             press = pressure_avg,
+                             wind = wind_avg,
+                             visib = visibility_avg,
+                             rv = rv_avg,
+                             Appliances = Appliances_total,
+                             lights = lights_total)
+
+write_csv(daily_dataset,"C:/Users/AMI017/Desktop/Rio/daily_dataset.csv")
+daily_dataset <- cbind(daily_dataset, month = months(daily_dataset$date))
+daily_dataset$month <- ordered(daily_dataset$month, month.name)
+
+```
+
+
+
+total power consumed everyday
+```{r}
+ggplot(daily_dataset, aes(date, Appliances / 1000, fill = month)) +
+  geom_bar(stat="identity", position =  position_dodge()) +
+  xlab("") +
+  ylab("Total Power Consumption Per Day (KW)") +
+  labs(fill = " ") +
+  theme(legend.position = "top", 
+              legend.text=element_text(size=10),
+              legend.box = "vertical",
+              axis.text.x = element_text(face="bold",color="#993333", size=-10, angle=0, hjust= -2, vjust = 0), # x , y labels
+              axis.text.y = element_text(face="bold",color="#993333", size=10, angle=0), 
+              axis.title.x = element_text(face="bold", vjust=0, size=10),  # X axis title
+              axis.title.y = element_text(face="bold", hjust= 0.5, vjust= 3 , size=10)) 
+
+ggsave("total_daily_power_consumption.png")
+```
+
+
+
+total power consumed everyday (animation)
+```{r}
+total_daily <- ggplot(daily_dataset, aes(date, Appliances / 1000, fill = month)) +
+  geom_bar(stat="identity", position =  position_dodge()) +
+  xlab("") +
+  ylab("Total Power Consumption Per Day (KW)") +
+  labs(fill = " ") + 
+  theme(legend.position = "right", 
+            legend.text=element_text(size=16, color="#993333",face="bold"),
+            legend.box = "vertical",
+            axis.text.x = element_text(face="bold",color="#993333", size=16, angle=45, hjust= 1, vjust = 1), # x , y labels
+            axis.text.y = element_text(face="bold",color="#993333", size=16, angle=0), 
+            axis.title.x = element_text(face="bold",color="#993333", vjust=0, size=16),  # X axis title
+            axis.title.y = element_text(face="bold",color="#993333", hjust= 0.5, vjust= 3 , size=16),
+            plot.title = element_text(size = 30, face = "bold", colour = "red")
+            )  +
+  transition_states(date, wrap = TRUE, transition_length = 1, state_length = 1) +
+  shadow_mark() +
+  labs(title = 'Date: {closest_state}')
+
+animate(total_daily, fps = 20, duration = 18, height = 600, width =600)
+anim_save("total_daily_power_consumption_power_consumption.gif")
+
+```
+
+
+
+# Normalise inputs
+- see the range of inputs before normalisation (columns 4-9)
+```{r}
+boxplot(daily_dataset[,2:7], outcol = "red", outcex = 1.5)
+```
+- features have different range; so we need normalisation
+
+```{r}
+colnames(daily_dataset)
+```
+
+
+
+- Z-score normalization
+```{r}
+sd_value <- double(6) # columns 1-3 are not input
+mean_value <- double(6)
+
+for (i in 2:7) {
+  sd_value[i] <- sd(daily_dataset[,i], na.rm = TRUE)
+  mean_value[i] <- mean(daily_dataset[,i], na.rm = TRUE)
+  daily_dataset[,i] <- (daily_dataset[,i]- mean_value[i])/ sd_value[i] # standardise the data
+}
+```
+
+
+- see the normalised features and check their range
+```{r}
+boxplot(daily_dataset[,2:7], outcol = "red", outcex = 1.5)
+```
+*** Now data is ready to be used to develop a predictive model
+
+```{r}
+write_csv(daily_dataset,"C:/Users/AMI017/Desktop/Rio/daily_dataset_normalised.csv")
+```
