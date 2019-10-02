@@ -1,0 +1,291 @@
+-----------------------------------------
+title: "Rio Tinto"
+author: "Amir Amin"
+date: "01 October 2019"
+Project: Power Consumption Prediction
+output: html_document
+-----------------------------------------
+Developing predictive models
+-----------------------------------------
+
+call the packages
+```{r}
+library(doParallel) # set up the computer for parallel processing
+library(ggplot2) # visualisation
+library(corrplot) # plot the correlation
+library(caret) # ML algorithms
+library(lubridate)# ML algorithms
+library(forecast) # ML algorithms
+library(earth) # ML algorithms
+library(lattice) # ML algorithms
+```
+
+
+# setup the parallel processing
+```{r}
+registerDoParallel(cores=2)
+```
+
+
+- In this section, I use the most common regression techniques and compare their prediction errors to choose the best for this work
+# I'm using two types of techniques to develop the models
+# (1) Transforming the dataset into the time series and use Arima to develop model
+# (2) Keeping the dataset as it is and implementing 10 ML techniques to develop models
+
+
+# (1) Arima
+import the pre-processed dataset
+input data has been cleaned and pre-processed; ready to be used to develop predictive algorithms
+```{r}
+setwd("C:/Users/AMI017/Desktop/Rio")
+power_consumption <- read.csv("daily_dataset_normalised.csv")
+```
+
+
+feature names
+```{r}
+colnames(power_consumption)
+```
+
+
+Arima Modelling
+- Split the dataset into training 80% & testing 20%  datasets before modelling
+```{r}
+# power_consumption <- as.matrix(power_consumption)
+power_consumption <- ts(power_consumption, start = 1)
+
+# split test and train- total data = 138 (~70% train / ~30% test)
+train_data <- window(power_consumption, end = 100)
+test_data <- window(power_consumption, start = 101)
+
+# find the best values of order for Arima
+acf(power_consumption, lag.max=34) 
+
+# fit model
+variables <- c("temp", "humidity", "press", "wind", "visib", "rv")
+Arima_model <- auto.arima(train_data[,"Appliances"], xreg = train_data[, variables])
+
+summary(Arima_model)
+
+# forecast
+Arima_predicted <- forecast(Arima_model, xreg = test_data[, variables])
+```
+
+
+```{r}
+# plot the prediction & observed
+autoplot(Arima_predicted,
+         ts.colour = 'firebrick1', predict.colour = 'red',
+         predict.linetype = 'dashed', conf.int = FALSE) +
+  geom_line(aes(x = c(101:138), y = test_data[,"Appliances"], colour = "red")) +
+  geom_smooth(size = 5) + # ggtitle('Linear Regression ')
+  xlab ("Days") +
+  ylab ("Total Power Consumption (W)") +
+  theme(legend.position = "None", 
+        legend.text=element_text(size=10),
+        legend.box = "vertical",
+        legend.title = element_text(size=10),
+        axis.text.y = element_text(face="bold",color="#993333", size=10, angle=0, hjust= 1, vjust = 1),
+        axis.text.x = element_text(face="bold",color="#993333", size=10, angle=0),
+        axis.title.x = element_text(face="bold", vjust=0, size=10),
+        axis.title.y = element_text(face="bold", hjust= 0.5, vjust= 3 , size=10)) 
+```
+
+
+
+# (2) Implementing 10 ML techniques without transforming the dataset
+reload the dataset without transforming it to time series
+```{r}
+setwd("C:/Users/AMI017/Desktop/Rio")
+power_consumption <- read.csv("daily_dataset_normalised.csv")
+```
+
+
+split the data into test and train
+```{r}
+train_data <- power_consumption[which(as.numeric(power_consumption$date) <= 100) ,]
+test_data <- power_consumption[which(as.numeric(power_consumption$date) > 100) ,]
+```
+
+
+define seed to make sure that models results are reproducable
+```{r}
+set.seed(500)
+seeds <- vector(mode = "list", length = 138) # we have 1138 days of data
+for(i in 1:138) seeds[[i]] <- sample.int(1000, 5)
+# seeds[[432]] <- sample.int(1000, 1) ## For the last model:
+```
+
+
+define the train control with cross validation
+```{r}
+train_control <- trainControl(method = "timeslice",
+                              initialWindow = 36,
+                              horizon = 12,
+                              fixedWindow = FALSE,
+                              allowParallel = TRUE,
+                              seeds = seeds)
+tune_Length_num <- 5
+```
+
+
+# glmnet
+```{r}
+glmnet.mod <- train(Appliances ~ . - date,
+                    data = train_data,
+                    method = "glmnet",
+                    family = "gaussian",
+                    trControl = train_control,
+                    tuneLength=tune_Length_num)
+```
+
+
+# lm
+```{r}
+lm.mod <- train(Appliances ~ . - date,
+                  data = train_data,
+                  method = "lm",
+                  trControl = train_control,
+                tuneLength=tune_Length_num)
+```
+
+
+# earth
+```{r}
+earth.mod <- train(Appliances ~ . - date,
+                data = train_data,
+                method = "earth",
+                trControl = train_control,
+                tuneLength=tune_Length_num)
+```
+
+
+# earth (assume family=poisson)
+```{r}
+earth.pois.mod <- train(Appliances ~ . - date,
+                        data = train_data,
+                        method = "earth",
+                        glm = list(family=poisson),
+                        trControl = train_control,
+                        tuneLength=tune_Length_num)
+```
+
+
+# gam
+```{r}
+gam.mod <- train(Appliances ~ . - date,
+                   data = train_data,
+                   method = "gam",
+                   trControl = train_control,
+                   tuneLength=tune_Length_num)
+```
+
+
+# rpart
+```{r}
+rpart.mod <- train(Appliances ~ . - date,
+                 data = train_data,
+                 method = "rpart",
+                 trControl = train_control,
+                 tuneLength=tune_Length_num)
+```
+
+
+# ctree
+```{r}
+party.mod <- train(Appliances ~ . - date,
+                   data = train_data,
+                   method = "ctree",
+                   trControl = train_control,
+                   tuneLength=tune_Length_num)
+```
+
+
+# rf
+```{r}
+rf.mod <- train(Appliances ~ . - date,
+                data = train_data,
+                method = "rf",
+                trControl = train_control,
+                tuneLength=tune_Length_num)
+```
+
+
+# gbm
+```{r}
+gbm.mod <- train(Appliances ~ . - date,
+                 data = train_data,
+                 method = "gbm",
+                 distribution="poisson",
+                 trControl = train_control,
+                 tuneLength=tune_Length_num,
+                 verbose=FALSE)
+```
+
+
+# glmnet
+```{r}
+pois.mod <- train(Appliances ~ . - date,
+                    data = train_data,
+                    method = "glmnet",
+                    family = "poisson",
+                    trControl = train_control,
+                  tuneLength=tune_Length_num)
+```
+
+
+
+# put all the models in a list
+```{r}
+resamples <- resamples(list(
+                          # Arima = Arima_model,
+                          glmnet = glmnet.mod,
+                          glmnet.pois = pois.mod,
+                          lm = lm.mod,
+                          earth=earth.mod,
+                          earth.pois=earth.pois.mod,
+                          gbm=gbm.mod,
+                          gam=gam.mod,
+                          rf=rf.mod,
+                          rpart=rpart.mod,
+                          party=party.mod))
+resamples
+```
+
+
+# compare the models
+```{r}
+model_summary <- summary(resamples)
+knitr::kable(model_summary[[3]]$RMSE)
+```
+
+
+# show the comparison of the models 
+```{r}
+trellis.par.set(caretTheme())
+dotplot(resamples, metric = "RMSE")
+```
+
+
+correlation between the features
+```{r}
+corr_value <- modelCor(resamples)
+
+png(height=1200, width=1200, pointsize=25, file="Correlation_models.png")
+
+corrplot(corr_value, 
+         method="pie",  
+         type = "upper",
+         tl.col = "black",
+         tl.srt = 90, 
+         sig.level = 0.01, 
+         insig = "blank",
+         tl.cex = 0.7) 
+```
+
+****************************************************************************************************************************
+Conclusion: 
+
+We can see that rf and glmnet have the lowest prediction error. This error is similar to the error of Arima model (RMSE ~ 4200)
+Therefore, we consider this model, at this stage, as the best one. 
+****************************************************************************************************************************
